@@ -1,0 +1,155 @@
+---
+title: "Practical Machine Learning Project"
+author: "Sailaja M"
+date: "April 22, 2018"
+output: html_document
+---
+###What you should submit
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+Reproducibility
+Due to security concerns with the exchange of R code, your code will not be run during the evaluation by your classmates. Please be sure that if they download the repo, they will be able to view the compiled HTML version of your analysis.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Library for caret and randomForest library
+```{r}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(dplyr)
+```
+##set directory to the local folder and Download the csv files and then load and read the csv files
+```{r}
+training<-read.csv(file="pml-training.csv",sep = ',', header = TRUE)
+testing<-read.csv(file="pml-testing.csv",sep=',', header=TRUE)
+```
+###Partitioning the training set into 60% for training and 40% for testing
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]
+```
+###Removing non zero values and cleaning the data from the myTraining
+```{r}
+NZVdata <- nearZeroVar(myTraining, saveMetrics=TRUE)
+```
+
+### Adding another Data frame with  non zero variables
+```{r}
+NZVvars <- names(myTraining) %in% c("new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+"kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+"max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
+"var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
+"stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
+"kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+"max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
+"kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+"skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+"amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+"skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
+"max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
+"amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
+"avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
+"stddev_yaw_forearm", "var_yaw_forearm")
+myTraining <- myTraining[!NZVvars]
+
+
+```
+###Removing the ID column as that is not required for our analysis
+```{r}
+myTraining <- myTraining[c(-1)]
+```
+
+##Creating a for loop for the training V1
+
+```{r}
+trainingV1 <- myTraining
+for(i in 1:length(myTraining)) {
+  if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .6 ) {
+    for(j in 1:length(trainingV1)) {
+if( length( grep(names(myTraining[i]), names(trainingV1)[j]) ) ==1)  {
+   trainingV1 <- trainingV1[ , -j]
+} 
+    }
+  }
+}
+```
+###Setting up our trainingV1
+```{r}
+myTraining <- trainingV1
+rm(trainingV1)
+```
+###Creating model 1 and model 2 to create testing from model2
+```{r}
+model1 <- colnames(myTraining)
+model2 <- colnames(myTraining[, -58])
+myTesting <- myTesting[model1]
+testing <- testing[model2]
+```
+###Coercing the data to be the same
+```{r}
+for (i in 1:length(testing) ) {
+        for(j in 1:length(myTraining)) {
+        if( length( grep(names(myTraining[i]), names(testing)[j]) ) ==1)  {
+            class(testing[j]) <- class(myTraining[i])
+        }      
+    }      
+}
+```
+##Using rbind to combine the rows and removing columns that are not required
+```{r}
+testing <- rbind(myTraining[2, -58] , testing)
+testing <- testing[-1,]
+```
+
+### Modelfit1 and decision tree
+```{r}
+modelfit1 <- rpart(classe ~ ., data=myTraining, method="class")
+
+```
+###Using fancyRpartplot for modelfit1
+```{r}
+fancyRpartPlot(modelfit1)
+```
+###Creating prediction1
+```{r}
+prediction1 <- predict(modelfit1, myTesting, type = "class")
+```
+
+###ConfusionMatrix for prediction1
+```{r}
+confusionMatrix(prediction1, myTesting$classe)
+```
+###Modelfit2
+```{r}
+modelfit2 <- randomForest(classe ~. , data=myTraining)
+```
+###Prediction 2 using the modelfit2
+```{r}
+prediction2 <- predict(modelfit2, myTesting, type = "class")
+```
+###ConfusionMatrix for prediction2
+```{r}
+confusionMatrix(prediction2, myTesting$classe)
+```
+###Prediction 3 using the modelfit2
+```{r}
+prediction3 <- predict(modelfit2, testing, type = "class")
+```
+###Writing function to get the answers for Quiz4
+```{r}
+pml_quiz4 = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_quiz4(prediction3)
+```
